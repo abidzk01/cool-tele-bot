@@ -1,0 +1,32 @@
+[Unit]
+Description=Telegram Bot (System Info + YouTube/TikTok/Instagram Downloader) untuk %i
+Documentation=file:/opt/app_bot_telegram/docs/DEPLOY.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/app_bot_telegram
+EnvironmentFile=/opt/app_bot_telegram/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=DATA_DIR=/opt/app_bot_telegram
+ExecStart=/opt/app_bot_telegram/.venv/bin/python /opt/app_bot_telegram/bot.py
+Restart=always
+RestartSec=10
+# beri waktu unduhan/unggahan yang sedang jalan berhenti rapi
+TimeoutStopSec=30
+KillSignal=SIGINT
+StandardOutput=journal
+StandardError=journal
+
+# --- Pengerasan dasar ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ReadWritePaths=/opt/app_bot_telegram
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,41 @@
+# Docker Compose untuk bot Telegram (info sistem + downloader media).
+#
+#   cp .env.example .env && nano .env      # isi BOT_TOKEN
+#   mkdir -p cookies
+#   docker compose up -d --build
+#   docker compose logs -f
+#
+# Healthcheck diwarisi dari Dockerfile: `python bot.py --health`
+# (memeriksa heartbeat yang ditulis job queue tiap 60 detik).
+
+name: appbot-telegram
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: appbot-telegram:latest
+    container_name: appbot-telegram
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Jakarta}
+      DATA_DIR: /app/data
+    volumes:
+      # data runtime (file unduhan dihapus otomatis setelah dikirim)
+      - appbot_data:/app/data
+      # cookies opsional: taruh youtube.txt / instagram.txt / tiktok.txt di sini
+      - ./cookies:/app/cookies:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # beri kesempatan unduhan/unggahan yang sedang jalan untuk berhenti rapi
+    stop_grace_period: 30s
+
+volumes:
+  appbot_data:

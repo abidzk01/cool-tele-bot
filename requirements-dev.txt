@@ -1,0 +1,3 @@
+# Dependency tambahan untuk pengembangan/pengujian (tidak dibutuhkan di runtime).
+-r requirements.txt
+pyyaml>=6.0          # validasi docker-compose.yml di tes

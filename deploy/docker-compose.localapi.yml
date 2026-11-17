@@ -1,0 +1,38 @@
+# Override opsional: Telegram Bot API server lokal (upload sampai ~2 GB).
+#
+#   Tambahkan ke .env:
+#     TELEGRAM_API_ID=1234567
+#     TELEGRAM_API_HASH=abcdef0123456789abcdef0123456789
+#     MAX_UPLOAD_MB=1900
+#
+#   Jalankan:
+#     docker compose -f docker-compose.yml -f deploy/docker-compose.localapi.yml up -d --build
+#
+# Dapatkan api_id/api_hash di https://my.telegram.org/apps
+# Catatan: bot akan restart otomatis sampai server API siap menerima permintaan.
+
+services:
+  bot:
+    environment:
+      LOCAL_API_URL: http://bot-api:8081
+    depends_on:
+      - bot-api
+
+  bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: appbot-telegram-api
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+      TELEGRAM_LOCAL: "1"
+    volumes:
+      - appbot_api_data:/var/lib/telegram-bot-api
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  appbot_api_data:

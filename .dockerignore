@@ -1,0 +1,28 @@
+# Virtualenv & cache Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Rahasia & data runtime
+.env
+cookies/
+downloads/
+tmp/
+*.log
+logs/
+
+# Repo & tooling
+.git/
+.gitignore
+.github/
+
+# Tidak perlu masuk image
+tests/
+docs/
+scripts/
+deploy/
+
+# Berkas docker sendiri
+Dockerfile
+docker-compose*.yml
+.dockerignore

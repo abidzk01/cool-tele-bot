@@ -1,0 +1,38 @@
+# Quadlet Podman (rootless) untuk bot Telegram.
+#
+#   mkdir -p ~/.config/containers/systemd
+#   cp deploy/appbot-telegram.container ~/.config/containers/systemd/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now appbot-telegram
+#   journalctl --user -u appbot-telegram -f
+#
+# Prasyarat (lihat docs/DEPLOY.md):
+#   podman build -t localhost/appbot-telegram:latest /opt/app_bot_telegram
+#   mkdir -p /opt/app_bot_telegram/{downloads,tmp,cookies}
+#
+# UserNS=keep-id memetakan user host ke uid 1000 di container, sehingga bind mount
+# milik user bisa ditulis oleh proses non-root di dalam image.
+
+[Unit]
+Description=Telegram Bot (System Info + Media Downloader)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=appbot-telegram
+Image=localhost/appbot-telegram:latest
+EnvironmentFile=/opt/app_bot_telegram/.env
+Environment=DATA_DIR=/app/data
+UserNS=keep-id:uid=1000,gid=1000
+Volume=/opt/app_bot_telegram/downloads:/app/data/downloads:Z
+Volume=/opt/app_bot_telegram/tmp:/app/data/tmp:Z
+Volume=/opt/app_bot_telegram/cookies:/app/cookies:ro,Z
+# pull image terbaru otomatis saat `podman auto-update` dijalankan
+AutoUpdate=local
+
+[Service]
+Restart=always
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
