@@ -1,0 +1,6 @@
+#!/bin/sh
+# Enforce Conventional Commits + English commit messages.
+# Enable once per clone: git config core.hooksPath .githooks
+set -eu
+root="$(git rev-parse --show-toplevel)"
+exec python3 "$root/scripts/check_commit_message.py" "$1"
