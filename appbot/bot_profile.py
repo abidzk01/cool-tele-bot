@@ -1,8 +1,8 @@
-"""Dorong daftar perintah & profil bot ke Telegram agar menu "/" otomatis muncul.
+"""Push the command list and bot profile to Telegram so the "/" menu appears.
 
-Dijalankan otomatis saat bot start (lihat bot.py --push-commands untuk menjalankan manual).
-Daftar menu diturunkan dari CommandHandler yang benar-benar terdaftar, sehingga tidak
-mungkin melenceng dari kode.
+Runs automatically when the bot starts (see bot.py --push-commands to run it manually).
+The menu list is derived from the CommandHandlers that are actually registered, so it
+cannot drift away from the code.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from telegram.error import TelegramError
 
 log = logging.getLogger("appbot.profile")
 
-# Perintah yang ditampilkan di menu "/" (urutannya mengikuti daftar ini).
+# Commands shown in the "/" menu (the order follows this list).
 MENU_COMMANDS: tuple[tuple[str, str], ...] = (
     ("start", "Mulai bot & ringkasan fitur"),
     ("help", "Bantuan & daftar perintah"),
@@ -34,7 +34,7 @@ MENU_COMMANDS: tuple[tuple[str, str], ...] = (
     ("id", "Lihat user ID & chat ID"),
 )
 
-# Nama alternatif yang sengaja tidak ditampilkan di menu (tetap berfungsi bila diketik).
+# Alternative names deliberately hidden from the menu (still work when typed).
 ALIASES: dict[str, str] = {
     "youtube": "yt",
     "ytdl": "yt",
@@ -64,7 +64,7 @@ DESCRIPTION = (
 
 @dataclass
 class PushReport:
-    """Hasil pendorongan konfigurasi ke Telegram."""
+    """Result of pushing the configuration to Telegram."""
 
     applied: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
@@ -76,18 +76,18 @@ class PushReport:
         return not self.failed
 
     def summary(self) -> str:
-        parts = [f"{len(self.applied)} pengaturan diterapkan"]
+        parts = [f"{len(self.applied)} settings applied"]
         if self.menu_size:
-            parts.append(f"{self.menu_size} perintah di menu")
+            parts.append(f"{self.menu_size} commands in the menu")
         if self.unexpected:
-            parts.append("perintah tanpa deskripsi: " + ", ".join(sorted(self.unexpected)))
+            parts.append("commands without a description: " + ", ".join(sorted(self.unexpected)))
         if self.failed:
-            parts.append("gagal: " + "; ".join(self.failed))
+            parts.append("failed: " + "; ".join(self.failed))
         return " | ".join(parts)
 
 
 def registered_commands(application) -> set[str]:
-    """Semua nama perintah yang benar-benar terdaftar di application."""
+    """Every command name that is actually registered in application."""
     found: set[str] = set()
     for group in application.handlers.values():
         for handler in group:
@@ -97,7 +97,7 @@ def registered_commands(application) -> set[str]:
 
 
 def collect_menu(application=None) -> list[BotCommand]:
-    """Bangun daftar menu dari perintah terdaftar (semua bila application=None)."""
+    """Build the menu from registered commands (all of them when application=None)."""
     registered = registered_commands(application) if application is not None else None
     menu: list[BotCommand] = []
     for name, description in MENU_COMMANDS:
@@ -107,16 +107,16 @@ def collect_menu(application=None) -> list[BotCommand]:
 
 
 def unexpected_commands(application) -> set[str]:
-    """Perintah terdaftar yang bukan menu resmi maupun alias yang diketahui."""
+    """Registered commands that are neither an official menu entry nor a known alias."""
     known = {name for name, _ in MENU_COMMANDS} | set(ALIASES)
     return registered_commands(application) - known
 
 
 async def push_bot_profile(bot: Bot, application=None) -> PushReport:
-    """Dorong daftar perintah (default/DM/grup), deskripsi, dan menu button.
+    """Push the command list (default/private/group), description, and menu button.
 
-    Setiap panggilan dibungkus try/except agar satu kegagalan (mis. deskripsi terlalu
-    panjang atau fitur tidak didukung) tidak membatalkan pengaturan lainnya.
+    Every call is wrapped in try/except so that a single failure (e.g. a description that is
+    too long or an unsupported feature) does not cancel the remaining settings.
     """
     report = PushReport()
     menu = collect_menu(application)
@@ -126,16 +126,16 @@ async def push_bot_profile(bot: Bot, application=None) -> PushReport:
 
     scopes = (
         ("default", BotCommandScopeDefault()),
-        ("chat pribadi", BotCommandScopeAllPrivateChats()),
-        ("grup", BotCommandScopeAllGroupChats()),
-        ("admin grup", BotCommandScopeAllChatAdministrators()),
+        ("private chats", BotCommandScopeAllPrivateChats()),
+        ("groups", BotCommandScopeAllGroupChats()),
+        ("group admins", BotCommandScopeAllChatAdministrators()),
     )
 
     tasks: list[tuple[str, object]] = []
     for label, scope in scopes:
-        tasks.append((f"perintah ({label})", lambda s=scope: bot.set_my_commands(menu, scope=s)))
-    tasks.append(("deskripsi singkat", lambda: bot.set_my_short_description(SHORT_DESCRIPTION)))
-    tasks.append(("deskripsi", lambda: bot.set_my_description(DESCRIPTION)))
+        tasks.append((f"commands ({label})", lambda s=scope: bot.set_my_commands(menu, scope=s)))
+    tasks.append(("short description", lambda: bot.set_my_short_description(SHORT_DESCRIPTION)))
+    tasks.append(("description", lambda: bot.set_my_description(DESCRIPTION)))
     tasks.append(("menu button", lambda: bot.set_chat_menu_button(menu_button=MenuButtonCommands())))
 
     for label, factory in tasks:
@@ -143,15 +143,15 @@ async def push_bot_profile(bot: Bot, application=None) -> PushReport:
             await factory()
         except TelegramError as exc:
             report.failed.append(f"{label}: {str(exc)[:120]}")
-            log.warning("Gagal menerapkan %s: %s", label, exc)
+            log.warning("Failed to apply %s: %s", label, exc)
         except Exception as exc:  # noqa: BLE001
             report.failed.append(f"{label}: {type(exc).__name__}")
-            log.warning("Gagal menerapkan %s: %s", label, exc)
+            log.warning("Failed to apply %s: %s", label, exc)
         else:
             report.applied.append(label)
 
     if report.ok:
-        log.info("Profil bot diperbarui: %s", report.summary())
+        log.info("Bot profile updated: %s", report.summary())
     else:
-        log.warning("Profil bot sebagian gagal: %s", report.summary())
+        log.warning("Bot profile partially failed: %s", report.summary())
     return report

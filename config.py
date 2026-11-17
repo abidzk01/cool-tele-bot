@@ -1,4 +1,4 @@
-"""Konfigurasi terpusat, dibaca dari environment / file .env."""
+"""Central configuration, read from the environment / .env file."""
 from __future__ import annotations
 
 import glob
@@ -103,12 +103,12 @@ class Settings:
         return user_id in self.allowed_user_ids
 
     def is_admin(self, user_id: int | None) -> bool:
-        """Admin boleh membersihkan pekerjaan & file milik semua pengguna."""
+        """Admins may clean up jobs and files owned by every user."""
         if user_id is None:
             return False
         if self.admin_user_ids:
             return user_id in self.admin_user_ids
-        # bila ADMIN_USER_IDS kosong, whitelist dianggap admin
+        # when ADMIN_USER_IDS is empty, the allowlist is treated as admin
         return bool(self.allowed_user_ids) and user_id in self.allowed_user_ids
 
     def cookies_for(self, platform_key: str) -> str | None:

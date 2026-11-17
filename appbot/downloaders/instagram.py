@@ -1,4 +1,4 @@
-"""Downloader Instagram (reels, post foto/video, carousel) via yt-dlp."""
+"""Instagram downloader (reels, photo/video posts, carousels) via yt-dlp."""
 from __future__ import annotations
 
 import logging

@@ -1,4 +1,4 @@
-"""Info sistem untuk command /sysinfo."""
+"""System information for the /sysinfo command."""
 from __future__ import annotations
 
 import os
@@ -86,7 +86,7 @@ def collect(ffmpeg_path: str | None = None, started_at: float | None = None) -> 
     except (OSError, AttributeError):
         load1 = load5 = load15 = 0.0
 
-    # snapshot CPU non-blocking, fallback ke interval pendek
+    # non-blocking CPU snapshot, falling back to a short interval
     cpu_percent = psutil.cpu_percent(interval=None)
     if cpu_percent == 0.0:
         cpu_percent = psutil.cpu_percent(interval=0.3)

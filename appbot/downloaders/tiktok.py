@@ -1,4 +1,4 @@
-"""Downloader TikTok tanpa watermark (API tikwm + fallback yt-dlp)."""
+"""TikTok downloader without watermark (tikwm API + yt-dlp fallback)."""
 from __future__ import annotations
 
 import logging
@@ -24,7 +24,7 @@ async def download(settings, url: str, *, progress: Progress | None = None) -> D
             return await _download_tikwm(settings, url, progress)
         except DownloadError as exc:
             errors.append(f"tikwm: {exc}")
-            log.info("Fallback ke yt-dlp untuk TikTok (%s)", exc)
+            log.info("Falling back to yt-dlp for TikTok (%s)", exc)
 
     try:
         return await _download_ytdlp(settings, url, progress)
@@ -36,7 +36,7 @@ async def download(settings, url: str, *, progress: Progress | None = None) -> D
 
 
 # --------------------------------------------------------------------------- #
-# Jalur 1: API tikwm (konsisten tanpa watermark, mendukung slideshow foto)
+# Path 1: tikwm API (consistently watermark-free, supports photo slideshows)
 # --------------------------------------------------------------------------- #
 async def _tikwm_fetch(settings, url: str) -> dict:
     payload = {"url": url, "hd": "1", "count": "12", "cursor": "0"}
@@ -77,7 +77,7 @@ async def _download_tikwm(settings, url: str, progress: Progress | None) -> Down
         images = data.get("images") or []
 
         if images:
-            # slideshow foto -> kirim sebagai sekumpulan foto
+            # photo slideshow -> send as a set of photos
             total = len(images)
             for idx, img in enumerate(images, start=1):
                 link = _absolute(img, api_base)
@@ -108,7 +108,7 @@ async def _download_tikwm(settings, url: str, progress: Progress | None) -> Down
             if note and progress is not None:
                 progress.status = note
 
-        # musik/audio asli diunduh sekalian bila tersedia
+        # also download the original music/audio when available
         notes: list[str] = []
         music_url = _absolute(data.get("music"), api_base)
         if music_url:
@@ -117,15 +117,15 @@ async def _download_tikwm(settings, url: str, progress: Progress | None) -> Down
                 await base.http_download(music_url, audio_path, referer=TIKWM_REFERER)
                 items.append(MediaItem(path=audio_path, kind="audio", title=f"{title} (audio)"))
                 notes.append("Audio asli ikut dikirim.")
-            except (httpx.HTTPError, DownloadError) as exc:  # audio opsional
-                log.info("Audio TikTok dilewati: %s", exc)
+            except (httpx.HTTPError, DownloadError) as exc:  # audio is optional
+                log.info("Skipping TikTok audio: %s", exc)
 
-        # pastikan codec video kompatibel dengan pemutar Telegram
+        # make sure the video codec is compatible with Telegram players
         if progress is not None:
             progress.status = "menyiapkan video"
         items = await base.normalize_videos(items, settings)
 
-        # pindahkan ke folder permanen sebelum job dir dihapus
+        # move to the permanent folder before the job dir is deleted
         dest_dir = settings.download_dir / "tiktok"
         dest_dir.mkdir(parents=True, exist_ok=True)
         final: list[MediaItem] = []
@@ -160,10 +160,10 @@ def _unique(path: Path) -> Path:
 
 
 # --------------------------------------------------------------------------- #
-# Jalur 2: yt-dlp (fallback, format dipilih agar bebas watermark)
+# Path 2: yt-dlp (fallback; format chosen to stay watermark-free)
 # --------------------------------------------------------------------------- #
 def _is_watermarked(label: str) -> bool:
-    """Tentukan apakah format berwatermark, menghormati penanda negasi."""
+    """Return whether a format carries a watermark, honoring negation markers."""
     if any(tok in label for tok in
            ("no watermark", "no_watermark", "nowatermark", "nowm", "without watermark", "watermark-free")):
         return False

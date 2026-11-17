@@ -1,4 +1,4 @@
-"""Utilitas bersama untuk semua downloader (yt-dlp, ffmpeg, progress, cleanup)."""
+"""Shared utilities for all downloaders (yt-dlp, ffmpeg, progress, cleanup)."""
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +29,7 @@ USER_AGENT = (
 
 
 class DownloadError(RuntimeError):
-    """Kesalahan yang aman ditampilkan langsung ke pengguna."""
+    """An error that is safe to show directly to the user."""
 
 
 # --------------------------------------------------------------------------- #
@@ -69,7 +69,7 @@ class DownloadResult:
 
 @dataclass
 class Progress:
-    """State progres yang diisi hook yt-dlp / unduhan HTTP."""
+    """Progress state filled in by the yt-dlp hook / HTTP downloads."""
 
     status: str = "menyiapkan"
     percent: float = 0.0
@@ -84,7 +84,7 @@ class Progress:
     cancel_event: threading.Event = field(default_factory=threading.Event)
 
     def request_cancel(self) -> None:
-        """Minta unduhan berhenti; hook yt-dlp akan melempar DownloadCancelled."""
+        """Ask the download to stop; the yt-dlp hook then raises DownloadCancelled."""
         self.cancel_event.set()
 
     @property
@@ -92,8 +92,8 @@ class Progress:
         return self.cancel_event.is_set()
 
     def hook(self, d: dict) -> None:
-        # Hook berjalan di thread yt-dlp: raising di sini menghentikan unduhan
-        # (asyncio.cancel saja tidak bisa menghentikan thread yang sedang bekerja).
+        # The hook runs on a yt-dlp thread: raising here stops the download
+        # (asyncio.cancel alone cannot stop a thread that is already working).
         if self.cancel_event.is_set():
             raise yt_dlp.utils.DownloadCancelled("unduhan dibatalkan")
         status = d.get("status")
@@ -193,10 +193,10 @@ def kind_for(path: Path, default: str = "video") -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Direktori kerja
+# Working directory
 # --------------------------------------------------------------------------- #
 class JobDir:
-    """Direktori sementara per permintaan, dibersihkan setelah selesai."""
+    """Temporary per-request directory, removed once the request is done."""
 
     def __init__(self, root: Path, prefix: str = "job") -> None:
         self.root = root
@@ -214,7 +214,7 @@ class JobDir:
 
 
 def cleanup_old_jobs(root: Path, ttl_minutes: int) -> int:
-    """Hapus isi direktori kerja yang lebih tua dari ttl_minutes."""
+    """Remove working directory entries older than ttl_minutes."""
     if ttl_minutes <= 0 or not root.is_dir():
         return 0
     cutoff = time.time() - ttl_minutes * 60
@@ -233,7 +233,7 @@ def cleanup_old_jobs(root: Path, ttl_minutes: int) -> int:
 
 
 def cleanup_old_files(root: Path, ttl_minutes: int) -> int:
-    """Hapus file lama secara rekursif (direktori dibiarkan) untuk cegah penumpukan."""
+    """Recursively remove stale files (directories are kept) to prevent build-up."""
     if ttl_minutes <= 0 or not root.is_dir():
         return 0
     cutoff = time.time() - ttl_minutes * 60
@@ -254,7 +254,7 @@ def cleanup_old_files(root: Path, ttl_minutes: int) -> int:
 
 
 def purge_directory(root: Path) -> tuple[int, int]:
-    """Hapus seluruh isi direktori (file & subdirektori). Kembalikan (jumlah file, byte)."""
+    """Remove the whole directory contents (files and subdirectories). Return (file count, bytes)."""
     if not root.is_dir():
         return 0, 0
     files = 0
@@ -324,19 +324,19 @@ def _run_sync(url: str, opts: dict) -> dict | None:
 
 
 async def aextract(url: str, opts: dict) -> dict | None:
-    """Ambil metadata tanpa mengunduh."""
+    """Fetch metadata without downloading."""
     options = dict(opts)
     options["_skip_download"] = True
     return await asyncio.to_thread(_run_sync, url, options)
 
 
 async def adownload(url: str, opts: dict) -> dict | None:
-    """Unduh media."""
+    """Download the media."""
     return await asyncio.to_thread(_run_sync, url, dict(opts))
 
 
 def map_ytdlp_error(exc: Exception, platform: str) -> str:
-    """Ubah error yt-dlp menjadi pesan yang bisa dibaca pengguna."""
+    """Turn a yt-dlp error into a message the user can read."""
     text = str(exc)
     low = text.lower()
     if isinstance(exc, yt_dlp.utils.DownloadCancelled) or "dibatalkan" in low or "cancelled" in low:
@@ -369,7 +369,7 @@ def map_ytdlp_error(exc: Exception, platform: str) -> str:
 
 
 def items_from_info(info: dict, default_kind: str = "video") -> list[MediaItem]:
-    """Kumpulkan file hasil unduhan dari info dict yt-dlp (termasuk playlist)."""
+    """Collect the downloaded files from the yt-dlp info dict (playlists included)."""
     entries = info.get("entries")
     if entries:
         items: list[MediaItem] = []
@@ -411,7 +411,7 @@ def items_from_info(info: dict, default_kind: str = "video") -> list[MediaItem]:
 # ffmpeg helpers
 # --------------------------------------------------------------------------- #
 def ffprobe_path(ffmpeg: str | None) -> str | None:
-    """Cari ffprobe di sebelah ffmpeg, atau dari PATH."""
+    """Look for ffprobe next to ffmpeg, or fall back to PATH."""
     if ffmpeg:
         candidate = Path(ffmpeg).with_name("ffprobe")
         if candidate.is_file():
@@ -436,7 +436,7 @@ def probe_video_codec(path: Path, ffmpeg: str | None) -> str | None:
 
 
 def ensure_h264(path: Path, ffmpeg: str | None, crf: int = 23) -> Path:
-    """Transcode video non-H.264 (HEVC/VP9/AV1) agar bisa diputar inline di Telegram."""
+    """Transcode non-H.264 video (HEVC/VP9/AV1) so Telegram can play it inline."""
     if not ffmpeg or path.suffix.lower() not in VIDEO_EXTS:
         return path
     codec = probe_video_codec(path, ffmpeg)
@@ -453,10 +453,10 @@ def ensure_h264(path: Path, ffmpeg: str | None, crf: int = 23) -> Path:
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True)
     except (OSError, subprocess.SubprocessError) as exc:
-        log.warning("Transcode H.264 gagal dijalankan: %s", exc)
+        log.warning("Could not run the H.264 transcode: %s", exc)
         return path
     if proc.returncode != 0 or not target.is_file():
-        log.warning("Transcode H.264 gagal (%s): %s", path.name, (proc.stderr or "").strip()[:200])
+        log.warning("H.264 transcode failed (%s): %s", path.name, (proc.stderr or "").strip()[:200])
         return path
     path.unlink(missing_ok=True)
     return target
@@ -467,7 +467,7 @@ async def aensure_h264(path: Path, ffmpeg: str | None) -> Path:
 
 
 async def normalize_videos(items: list[MediaItem], settings) -> list[MediaItem]:
-    """Pastikan semua video ber-codec H.264 agar bisa diputar inline di Telegram."""
+    """Make sure every video uses the H.264 codec so Telegram can play it inline."""
     if not getattr(settings, "transcode_h264", False):
         return items
     normalized: list[MediaItem] = []
@@ -482,7 +482,7 @@ async def normalize_videos(items: list[MediaItem], settings) -> list[MediaItem]:
 
 def compress_to_fit(src: Path, dst: Path, limit_bytes: int, duration: float | None,
                     ffmpeg: str, max_height: int = 720) -> Path:
-    """Encode ulang video agar ukurannya mendekati batas upload."""
+    """Re-encode a video so its size lands close to the upload limit."""
     duration = duration or 0
     if duration <= 0:
         raise DownloadError("Durasi tidak diketahui, kompresi otomatis dilewati.")
@@ -500,7 +500,7 @@ def compress_to_fit(src: Path, dst: Path, limit_bytes: int, duration: float | No
         "-c:a", "aac", "-b:a", f"{audio_kbps}k", "-ac", "2",
         "-movflags", "+faststart", str(dst),
     ]
-    log.info("Kompresi video: %s -> %s (%d kbps)", src.name, dst.name, int(video_kbps))
+    log.info("Compressing video: %s -> %s (%d kbps)", src.name, dst.name, int(video_kbps))
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0 or not dst.is_file():
         raise DownloadError(f"Kompresi ffmpeg gagal: {(proc.stderr or '').strip()[:200]}")
@@ -508,7 +508,7 @@ def compress_to_fit(src: Path, dst: Path, limit_bytes: int, duration: float | No
 
 
 # --------------------------------------------------------------------------- #
-# Unduhan HTTP langsung (dipakai TikTok API)
+# Direct HTTP download (used by the TikTok API)
 # --------------------------------------------------------------------------- #
 async def http_download(url: str, dest: Path, progress: Progress | None = None,
                         headers: dict | None = None, referer: str | None = None) -> Path:

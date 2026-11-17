@@ -1,4 +1,4 @@
-"""Handler perintah dan pesan untuk bot."""
+"""Command and message handlers for the bot."""
 from __future__ import annotations
 
 import asyncio
@@ -56,7 +56,7 @@ bot akan otomatis mengenali platformnya.
 
 
 def restricted(func: Callable[..., Awaitable[None]]) -> Callable[..., Awaitable[None]]:
-    """Batasi akses berdasarkan ALLOWED_USER_IDS."""
+    """Restrict access based on ALLOWED_USER_IDS."""
 
     @functools.wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -67,7 +67,7 @@ def restricted(func: Callable[..., Awaitable[None]]) -> Callable[..., Awaitable[
                 await update.effective_message.reply_text(
                     "⛔ Maaf, bot ini dibatasi untuk pengguna tertentu."
                 )
-            log.info("Akses ditolak untuk user %s", getattr(user, "id", None))
+            log.info("Access denied for user %s", getattr(user, "id", None))
             return
         await func(update, context)
 
@@ -75,7 +75,7 @@ def restricted(func: Callable[..., Awaitable[None]]) -> Callable[..., Awaitable[
 
 
 class LiveStatus:
-    """Perbarui pesan status secara berkala selama proses berjalan."""
+    """Refresh the status message periodically while work is in progress."""
 
     def __init__(self, message, progress: Progress, header: str, interval: float = 3.0) -> None:
         self.message = message
@@ -116,7 +116,7 @@ def _limits_text(settings) -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# Perintah dasar
+# Basic commands
 # --------------------------------------------------------------------------- #
 @restricted
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -174,14 +174,14 @@ async def cmd_sysinfo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 # --------------------------------------------------------------------------- #
-# Pembersihan
+# Cleanup
 # --------------------------------------------------------------------------- #
 @restricted
 async def cmd_cleanup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Batalkan unduhan yang berjalan lalu hapus file sisa.
+    """Cancel running downloads, then remove leftover files.
 
-    /cleanup        -> job milik sendiri; purge penuh bila tidak ada job lain
-    /cleanup all    -> (admin) batalkan semua job & purge seluruh folder
+    /cleanup        -> own jobs; full purge when no other job is running
+    /cleanup all    -> (admin) cancel every job & purge the whole folder
     """
     settings = context.application.bot_data["settings"]
     registry: jobs.JobRegistry = context.application.bot_data["jobs"]
@@ -209,7 +209,7 @@ async def cmd_cleanup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         dl_files, dl_bytes = purge_directory(settings.download_dir)
         partial_note = ""
     else:
-        # ada job pengguna lain: jangan hapus file yang mungkin sedang dipakai
+        # another user has a job running: do not delete files it may still be using
         tmp_files = cleanup_old_jobs(settings.temp_dir, ttl_minutes=1)
         dl_files = cleanup_old_files(settings.download_dir, ttl_minutes=1)
         tmp_bytes = dl_bytes = 0
@@ -222,7 +222,7 @@ async def cmd_cleanup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     total_bytes = tmp_bytes + dl_bytes
     scope_label = "semua pengguna" if scope_all else "milikmu"
 
-    # purge ikut menghapus penanda heartbeat -> tulis ulang agar healthcheck tetap hijau
+    # the purge also removes the heartbeat marker -> rewrite it so the healthcheck stays green
     with contextlib.suppress(OSError):
         health.touch(settings)
 
@@ -264,7 +264,7 @@ async def cb_sysinfo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 # --------------------------------------------------------------------------- #
-# Perintah unduh
+# Download commands
 # --------------------------------------------------------------------------- #
 async def _handle_download(update: Update, context: ContextTypes.DEFAULT_TYPE, *,
                            platform: str | None, allow_search: bool = False) -> None:
@@ -344,8 +344,8 @@ async def _handle_download(update: Update, context: ContextTypes.DEFAULT_TYPE, *
                 result = await task
         except asyncio.CancelledError:
             if not task.cancelled():
-                raise  # pembatalan berasal dari handler itu sendiri, bukan /cleanup
-            log.info("Job %s dibatalkan.", record.id)
+                raise  # the cancellation came from this handler itself, not from /cleanup
+            log.info("Job %s cancelled.", record.id)
             await _edit(status, "🛑 <b>Unduhan dibatalkan</b> oleh /cleanup.")
             return
         except DownloadError as exc:
@@ -355,7 +355,7 @@ async def _handle_download(update: Update, context: ContextTypes.DEFAULT_TYPE, *
             await _edit(status, f"❌ <b>Gagal</b>\n\n{html.escape(str(exc))}")
             return
         except Exception as exc:  # noqa: BLE001
-            log.exception("Kesalahan tak terduga saat unduh %s", url)
+            log.exception("Unexpected error while downloading %s", url)
             await _edit(status, f"❌ <b>Kesalahan tak terduga</b>\n<code>{html.escape(str(exc)[:200])}</code>")
             return
         finally:
@@ -378,10 +378,10 @@ async def _handle_download(update: Update, context: ContextTypes.DEFAULT_TYPE, *
                 reply_to=message.message_id,
             )
         finally:
-            # jaring pengaman: apa pun yang terjadi, file unduhan tidak ditinggal
+            # safety net: whatever happens, downloaded files are never left behind
             removed = telegram_io.cleanup_items(result.items)
             if removed:
-                log.debug("Membersihkan %d file unduhan setelah pengiriman.", removed)
+                log.debug("Removed %d downloaded files after sending.", removed)
 
         for note in result.notes:
             notes.append(f"ℹ️ {note}")
@@ -427,13 +427,13 @@ async def cmd_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 @restricted
 async def cmd_auto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Pesan teks biasa yang berisi link didukung."""
+    """Plain text message that contains a supported link."""
     message = update.effective_message
     text = message.text or message.caption or ""
     found = find_supported_url(text)
     if not found:
         chat = update.effective_chat
-        # di grup: diamkan obrolan biasa; di DM: beri petunjuk
+        # in groups: ignore ordinary chatter; in DMs: give a hint
         if getattr(chat, "type", "private") == "private":
             await message.reply_text(
                 "Link tidak dikenali. Kirim link YouTube, TikTok, atau Instagram "
@@ -446,7 +446,7 @@ async def cmd_auto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    log.error("Exception saat menangani update: %s", context.error, exc_info=context.error)
+    log.error("Exception while handling update: %s", context.error, exc_info=context.error)
     if isinstance(update, Update) and update.effective_message:
         with contextlib.suppress(Exception):
             await update.effective_message.reply_text(
@@ -455,12 +455,12 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def heartbeat(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Tulis penanda hidup agar healthcheck container tahu event loop masih jalan."""
+    """Write the liveness marker so the container healthcheck knows the event loop is alive."""
     health.touch(context.application.bot_data["settings"])
 
 
 async def janitor(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Bersihkan file sementara & sisa unduhan yang tertinggal."""
+    """Clean up temporary files & leftover downloads."""
     from .downloaders import cleanup_old_files, cleanup_old_jobs
 
     settings = context.application.bot_data["settings"]
@@ -468,6 +468,6 @@ async def janitor(context: ContextTypes.DEFAULT_TYPE) -> None:
     removed_dl = cleanup_old_files(settings.download_dir, settings.temp_ttl_minutes)
     if removed_tmp or removed_dl:
         log.info(
-            "Janitor menghapus %d item sementara dan %d file unduhan lama.",
+            "Janitor removed %d temporary items and %d old download files.",
             removed_tmp, removed_dl,
         )

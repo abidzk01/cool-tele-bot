@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Entry point bot Telegram: info sistem + downloader YouTube/TikTok/Instagram.
+"""Telegram bot entry point: system info + YouTube/TikTok/Instagram downloader.
 
-Pemakaian:
-    python bot.py            # jalankan bot (long polling)
-    python bot.py --check    # validasi token & dependency lalu keluar
-    python bot.py --sysinfo  # cetak laporan info sistem ke terminal
+Usage:
+    python bot.py            # run the bot (long polling)
+    python bot.py --check    # validate token & dependencies, then exit
+    python bot.py --sysinfo  # print a system info report to the terminal
 """
 from __future__ import annotations
 
@@ -82,36 +82,36 @@ def build_application(settings: Settings) -> Application:
 async def _post_init(application: Application) -> None:
     try:
         me = await application.bot.get_me()
-        log.info("Bot aktif sebagai @%s (id %s)", me.username, me.id)
+        log.info("Bot is running as @%s (id %s)", me.username, me.id)
     except TelegramError as exc:
-        log.error("Gagal memanggil getMe: %s", exc)
+        log.error("getMe call failed: %s", exc)
         await application.stop()
         return
 
     with contextlib.suppress(OSError):
         health.touch(application.bot_data["settings"])
 
-    # Daftarkan menu "/" (default, DM, grup) + deskripsi bot ke Telegram.
+    # Register the "/" menu (default scope, DM, group) and the bot description with Telegram.
     report = await bot_profile.push_bot_profile(application.bot, application)
     if report.ok:
         try:
             stored = await application.bot.get_my_commands()
-            log.info("Menu perintah aktif: %s", ", ".join(f"/{c.command}" for c in stored))
+            log.info("Active command menu: %s", ", ".join(f"/{c.command}" for c in stored))
         except TelegramError as exc:
-            log.debug("Tidak bisa membaca ulang daftar perintah: %s", exc)
+            log.debug("Could not re-read the command list: %s", exc)
 
 
 async def verify_token(token: str) -> str | None:
-    """Kembalikan pesan masalah bila token tidak bisa dipakai, atau None bila OK."""
+    """Return a problem message when the token is unusable, or None when it is fine."""
     from telegram import Bot
     from telegram.error import InvalidToken, TelegramError
 
     try:
         await Bot(token).get_me()
     except InvalidToken:
-        return "Token tidak valid. Ambil ulang token dari @BotFather lalu perbarui .env."
+        return "Invalid token. Fetch a new token from @BotFather and update .env."
     except TelegramError as exc:
-        return f"Tidak bisa menghubungi Telegram API: {exc}"
+        return f"Cannot reach the Telegram API: {exc}"
     return None
 
 
@@ -119,9 +119,9 @@ def run_bot(settings: Settings) -> None:
     application = build_application(settings)
     application.post_init = _post_init
     log.info(
-        "Mulai polling. Batas upload %.0f MB | maks %sp | paralel %d | ffmpeg: %s",
+        "Starting polling. Upload limit %.0f MB | max %sp | parallel %d | ffmpeg: %s",
         settings.max_upload_mb, settings.max_video_height, settings.max_concurrent,
-        settings.ffmpeg or "TIDAK ADA",
+        settings.ffmpeg or "MISSING",
     )
     application.run_polling(
         allowed_updates=Update.ALL_TYPES,
@@ -137,25 +137,25 @@ async def check_token(settings: Settings) -> int:
     try:
         me = await bot.get_me()
     except TelegramError as exc:
-        log.error("Token tidak valid atau jaringan bermasalah: %s", exc)
+        log.error("Invalid token or network problem: %s", exc)
         return 2
-    print(f"✅ Token valid: @{me.username} (id {me.id})")
-    print(f"   Nama bot       : {me.first_name}")
-    print(f"   ffmpeg         : {settings.ffmpeg or 'TIDAK DITEMUKAN'}")
-    print(f"   Batas upload   : {settings.max_upload_mb:.0f} MB")
-    print(f"   Resolusi maks  : {settings.max_video_height}p")
+    print(f"✅ Valid token: @{me.username} (id {me.id})")
+    print(f"   Bot name       : {me.first_name}")
+    print(f"   ffmpeg         : {settings.ffmpeg or 'NOT FOUND'}")
+    print(f"   Upload limit   : {settings.max_upload_mb:.0f} MB")
+    print(f"   Max resolution : {settings.max_video_height}p")
     print(f"   Download dir   : {settings.download_dir}")
     try:
         import yt_dlp
 
         print(f"   yt-dlp         : {yt_dlp.version.__version__}")
     except Exception:  # noqa: BLE001
-        print("   yt-dlp         : TIDAK TERPASANG")
+        print("   yt-dlp         : NOT INSTALLED")
     return 0
 
 
 async def push_commands_only(settings: Settings) -> int:
-    """Dorong menu perintah ke Telegram tanpa menjalankan bot (baca ulang untuk verifikasi)."""
+    """Push the command menu to Telegram without running the bot (read it back to verify)."""
     from telegram import Bot
 
     problem = await verify_token(settings.bot_token)
@@ -167,41 +167,52 @@ async def push_commands_only(settings: Settings) -> int:
     application = build_application(settings)
     report = await bot_profile.push_bot_profile(bot, application)
 
-    print("\n📋 Hasil pendorongan ke Telegram")
+    print("\n📋 Push result")
     for item in report.applied:
         print(f"   ✅ {item}")
     for item in report.failed:
         print(f"   ❌ {item}")
     if report.unexpected:
-        print(f"   ⚠️  perintah tanpa deskripsi di MENU_COMMANDS: {', '.join(sorted(report.unexpected))}")
+        print(
+            "   ⚠️  commands missing a MENU_COMMANDS entry: "
+            + ", ".join(sorted(report.unexpected))
+        )
 
     if report.ok:
         try:
             stored = await bot.get_my_commands()
         except TelegramError as exc:
-            print(f"   ⚠️  gagal membaca ulang daftar perintah: {exc}")
+            print(f"   ⚠️  could not re-read the command list: {exc}")
         else:
-            print(f"\n🔎 Daftar perintah yang tersimpan di Telegram ({len(stored)}):")
+            print(f"\n🔎 Commands stored on Telegram ({len(stored)}):")
             for cmd in stored:
                 print(f"   /{cmd.command} — {cmd.description}")
     return 0 if report.ok else 3
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bot Telegram: info sistem + downloader media")
-    parser.add_argument("--check", action="store_true", help="validasi token dan dependency lalu keluar")
-    parser.add_argument("--sysinfo", action="store_true", help="cetak info sistem lalu keluar")
+    parser = argparse.ArgumentParser(
+        description="Telegram bot: system info + media downloader"
+    )
+    parser.add_argument(
+        "--check", action="store_true",
+        help="validate the token and dependencies, then exit",
+    )
+    parser.add_argument(
+        "--sysinfo", action="store_true",
+        help="print a system info report, then exit",
+    )
     parser.add_argument(
         "--push-commands",
         action="store_true",
-        help="dorong daftar perintah & deskripsi bot ke Telegram lalu keluar",
+        help="push the command menu and bot description to Telegram, then exit",
     )
     parser.add_argument(
         "--health",
         action="store_true",
-        help="cek heartbeat (exit 0 sehat, 1 tidak) — dipakai healthcheck Docker/Podman",
+        help="check the heartbeat (exit 0 healthy, 1 unhealthy); used by the container healthcheck",
     )
-    parser.add_argument("--verbose", "-v", action="store_true", help="log level DEBUG")
+    parser.add_argument("--verbose", "-v", action="store_true", help="DEBUG log level")
     args = parser.parse_args()
 
     setup_logging(logging.DEBUG if args.verbose else logging.INFO)
@@ -224,7 +235,7 @@ def main() -> int:
 
     if not settings.bot_token:
         log.error(
-            "BOT_TOKEN belum diisi. Salin .env.example menjadi .env lalu isi token dari @BotFather."
+            "BOT_TOKEN is not set. Copy .env.example to .env and fill in the token from @BotFather."
         )
         return 1
 
@@ -242,7 +253,7 @@ def main() -> int:
     try:
         run_bot(settings)
     except KeyboardInterrupt:
-        log.info("Dihentikan oleh pengguna.")
+        log.info("Stopped by the user.")
     return 0
 
 

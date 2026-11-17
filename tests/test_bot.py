@@ -1,6 +1,6 @@
-"""Tes unit & integrasi ringan (tanpa jaringan, tanpa token Telegram).
+"""Lightweight unit and integration tests (no network, no Telegram token).
 
-Jalankan: .venv/bin/python -m unittest discover -s tests -v
+Run: .venv/bin/python -m unittest discover -s tests -v
 """
 from __future__ import annotations
 
@@ -183,7 +183,7 @@ class TestSystemInfo(unittest.TestCase):
         self.assertIn("RAM", report)
         self.assertIn("Disk", report)
         if settings.ffmpeg:
-            self.assertIn("✅", report)  # ffmpeg terdeteksi pada laporan
+            self.assertIn("✅", report)  # ffmpeg detected in the report
 
     def test_bars(self):
         self.assertEqual(system_info._bar(0, 4), "░░░░")
@@ -200,7 +200,7 @@ class TestConfig(unittest.TestCase):
             s = load_settings()
             self.assertEqual(s.max_upload_bytes, 49 * 1024 * 1024)
             self.assertEqual(s.max_concurrent, 2)
-            self.assertTrue(s.is_allowed(123))  # kosong = publik
+            self.assertTrue(s.is_allowed(123))  # empty list = public
         finally:
             os.environ.clear()
             os.environ.update(env_backup)
@@ -242,7 +242,7 @@ class TestApplicationWiring(unittest.TestCase):
             for cmd in getattr(h, "commands", None) or ():
                 flat.add(str(cmd))
         for cmd in ("start", "help", "yt", "tt", "ig", "sysinfo", "id"):
-            self.assertIn(cmd, flat, f"perintah /{cmd} tidak terdaftar")
+            self.assertIn(cmd, flat, f"command /{cmd} is not registered")
 
 
 class TestFfmpegCompression(unittest.TestCase):
@@ -264,7 +264,7 @@ class TestFfmpegCompression(unittest.TestCase):
                 capture_output=True, text=True,
             )
             if gen.returncode != 0 or not src.is_file():
-                self.skipTest(f"ffmpeg tidak bisa membuat video uji: {gen.stderr[:120]}")
+                self.skipTest(f"ffmpeg could not create the test video: {gen.stderr[:120]}")
             from appbot.downloaders.base import compress_to_fit
 
             compress_to_fit(src, dst, 60 * 1024, 4.0, settings.ffmpeg, max_height=360)
@@ -351,12 +351,12 @@ class TestTranscodeH264(unittest.TestCase):
             if not self._make(settings.ffmpeg, h264, "libx264"):
                 self.skipTest("tidak bisa membuat video uji")
             self.assertEqual(base.probe_video_codec(h264, settings.ffmpeg), "h264")
-            # video H.264 tidak perlu diubah
+            # an H.264 video needs no conversion
             self.assertEqual(base.ensure_h264(h264, settings.ffmpeg), h264)
 
             other = Path(tmp) / f"other{ext}"
             if not self._make(settings.ffmpeg, other, encoder):
-                self.skipTest(f"encoder {encoder} tidak berjalan")
+                self.skipTest(f"encoder {encoder} did not work")
             self.assertEqual(base.probe_video_codec(other, settings.ffmpeg), codec)
             converted = base.ensure_h264(other, settings.ffmpeg)
             self.assertNotEqual(converted, other)
@@ -398,7 +398,7 @@ class TestResolveTarget(unittest.TestCase):
 
 
 class TestTelegramSend(unittest.TestCase):
-    """Uji pengiriman media memakai bot tiruan (tanpa jaringan)."""
+    """Test media delivery using a stub bot (no network)."""
 
     class StubBot:
         def __init__(self):
@@ -463,7 +463,7 @@ class TestTelegramSend(unittest.TestCase):
             self.assertEqual(video_kwargs["filename"], "v.mp4")
             self.assertIn("Judul &lt;b&gt;uji&lt;/b&gt;", video_kwargs["caption"])
             self.assertNotIn("<b>uji</b>", video_kwargs["caption"])
-            # file lokal dihapus setelah dikirim
+            # local files are deleted after sending
             for path in files.values():
                 self.assertFalse(path.exists(), f"{path.name} seharusnya sudah dihapus")
 
@@ -481,7 +481,7 @@ class TestTelegramSend(unittest.TestCase):
             notes = asyncio.run(send_result(bot, 1, result, self._settings(limit_mb=1)))
             self.assertEqual(bot.named("send_video"), [])
             self.assertTrue(notes and "melebihi batas upload" in notes[0])
-            self.assertFalse(big.exists(), "file yang dilewati karena kebesaran harus dihapus")
+            self.assertFalse(big.exists(), "an oversized skipped file must be deleted")
 
     def test_deletes_file_when_both_send_attempts_fail(self):
         from appbot.telegram_io import send_result
@@ -502,7 +502,7 @@ class TestTelegramSend(unittest.TestCase):
             )
             notes = asyncio.run(send_result(BrokenBot(), 1, result, self._settings()))
             self.assertTrue(notes and "Gagal mengirim" in notes[0])
-            self.assertFalse(video.exists(), "file harus dihapus walau pengiriman gagal total")
+            self.assertFalse(video.exists(), "the file must be deleted even when every send fails")
 
     def test_cleanup_items_safety_net(self):
         from appbot.telegram_io import cleanup_items
@@ -514,7 +514,7 @@ class TestTelegramSend(unittest.TestCase):
             items = [base.MediaItem(path=p, kind="video") for p in paths]
             self.assertEqual(cleanup_items(items), 3)
             self.assertTrue(all(not p.exists() for p in paths))
-            # idempoten: aman dipanggil dua kali / dengan item kosong
+            # idempotent: safe to call twice or with an empty item list
             self.assertEqual(cleanup_items(items), 3)
             self.assertEqual(cleanup_items([]), 0)
             self.assertEqual(cleanup_items(None), 0)
@@ -563,7 +563,7 @@ class TestYoutubeGuards(unittest.TestCase):
 
 
 class TestBotProfilePush(unittest.TestCase):
-    """Uji pendorongan menu perintah ke Telegram memakai bot tiruan."""
+    """Test pushing the command menu to Telegram using a stub bot."""
 
     class StubBot:
         def __init__(self, fail: tuple[str, ...] = ()):
@@ -595,7 +595,7 @@ class TestBotProfilePush(unittest.TestCase):
         import re
 
         names = [n for n, _ in bot_profile.MENU_COMMANDS]
-        self.assertEqual(len(names), len(set(names)), "nama perintah harus unik")
+        self.assertEqual(len(names), len(set(names)), "command names must be unique")
         for name, description in bot_profile.MENU_COMMANDS:
             self.assertRegex(name, r"^[a-z0-9_]{1,32}$")
             self.assertTrue(3 <= len(description) <= 256, f"deskripsi /{name} di luar 3-256 karakter")
@@ -620,7 +620,7 @@ class TestBotProfilePush(unittest.TestCase):
         menu = bot_profile.collect_menu(app)
         names = [c.command for c in menu]
         self.assertEqual(names, [n for n, _ in bot_profile.MENU_COMMANDS])
-        # alias terdaftar di handler tetapi tidak muncul di menu
+        # aliases are registered on the handler but do not appear in the menu
         registered = bot_profile.registered_commands(app)
         for alias in ("youtube", "ytdl", "tiktok", "ttdl", "instagram", "igdl"):
             self.assertIn(alias, registered)
@@ -658,10 +658,10 @@ class TestBotProfilePush(unittest.TestCase):
         bot = self.StubBot(fail=("description", "short"))
         report = asyncio.run(bot_profile.push_bot_profile(bot, app))
         self.assertFalse(report.ok)
-        self.assertEqual(len(bot.named("set_my_commands")), 4, "kegagalan lain tidak boleh membatalkan ini")
+        self.assertEqual(len(bot.named("set_my_commands")), 4, "other failures must not cancel this")
         self.assertEqual(len(bot.named("set_chat_menu_button")), 1)
         self.assertEqual(len(report.failed), 2)
-        self.assertIn("gagal", report.summary())
+        self.assertIn("failed", report.summary())
 
     def test_push_reports_unknown_commands(self):
         class FakeHandler:
@@ -722,7 +722,7 @@ class TestJobRegistry(unittest.TestCase):
                 stopped = await registry.cancel_many([record])
                 self.assertEqual(stopped, 1)
                 self.assertTrue(record.task.cancelled())
-                self.assertFalse(holder["dir"].exists(), "JobDir harus dibersihkan saat dibatalkan")
+                self.assertFalse(holder["dir"].exists(), "JobDir must be cleaned up on cancellation")
                 self.assertEqual(len(registry), 0)
 
         asyncio.run(scenario())
@@ -763,7 +763,7 @@ class TestPurgeDirectory(unittest.TestCase):
 
 
 class TestCleanupCommand(unittest.TestCase):
-    """Uji /cleanup memakai update/context tiruan."""
+    """Test /cleanup using stub update/context objects."""
 
     class Msg:
         def __init__(self):
@@ -824,15 +824,15 @@ class TestCleanupCommand(unittest.TestCase):
 
         text = update.effective_message.texts[-1]
         self.assertIn("Pembersihan selesai", text)
-        self.assertIn("<b>1</b>", text)          # satu job dibatalkan
+        self.assertIn("<b>1</b>", text)          # one job was cancelled
         self.assertIn("File dihapus    : 2", text)
         self.assertEqual(len(self.registry), 0)
         self.assertTrue(job.cancelled)
         self.assertEqual(list((self.root / "dl").iterdir()), [])
-        # purge menghapus isi tmp, lalu heartbeat ditulis ulang agar healthcheck tetap hijau
+        # purge wipes tmp, then the heartbeat is rewritten so the healthcheck stays green
         self.assertEqual(
             {p.name for p in (self.root / "tmp").iterdir()}, {"heartbeat"},
-            "hanya heartbeat yang boleh tersisa di tmp/",
+            "only the heartbeat may remain in tmp/",
         )
         self.assertTrue(health.is_healthy(self.settings))
 
@@ -848,8 +848,8 @@ class TestCleanupCommand(unittest.TestCase):
         self.assertFalse(theirs.cancelled)
         self.assertEqual([j.id for j in self.registry.all()], [theirs.id])
         text = update.effective_message.texts[-1]
-        self.assertIn("pengguna lain", text)          # mode purge sebagian
-        # file baru (< 1 menit) tidak dihapus agar tidak mengganggu unduhan lain
+        self.assertIn("pengguna lain", text)          # partial purge mode
+        # fresh files (< 1 minute) are kept so other downloads are not disturbed
         self.assertTrue((self.root / "dl" / "youtube" / "v.mp4").exists())
 
     def test_admin_can_cleanup_everything(self):
@@ -973,7 +973,7 @@ class TestHealth(unittest.TestCase):
             os.utime(path, (0, 0))
             self.assertGreater(health.age(settings), 1000)
             self.assertFalse(health.is_healthy(settings))
-            # ambang lebih besar dari umur file -> dianggap sehat
+            # threshold larger than the file age -> considered healthy
             self.assertTrue(health.is_healthy(settings, max_age=health.age(settings) + 1))
 
     def test_cli_health_exit_codes(self):
@@ -990,9 +990,9 @@ class TestHealth(unittest.TestCase):
                 argv = sys.argv
                 sys.argv = ["bot.py", "--health"]
                 try:
-                    self.assertEqual(bot_module.main(), 1)  # belum ada heartbeat
+                    self.assertEqual(bot_module.main(), 1)  # no heartbeat yet
                     health.touch(load_settings())
-                    self.assertEqual(bot_module.main(), 0)  # sehat
+                    self.assertEqual(bot_module.main(), 0)  # healthy
                 finally:
                     sys.argv = argv
             finally:
@@ -1013,14 +1013,14 @@ class TestHealth(unittest.TestCase):
 
 
 class TestDeployFiles(unittest.TestCase):
-    """Validasi berkas deployment supaya tidak ada salah ketik yang lolos."""
+    """Validate the deployment files so no typo slips through."""
 
     ROOT = Path(__file__).resolve().parent.parent
 
     def test_compose_files_are_valid_yaml(self):
         try:
             import yaml
-        except ImportError:  # pragma: no cover - pyyaml hanya untuk pengujian
+        except ImportError:  # pragma: no cover - pyyaml is only used for testing
             self.skipTest("pyyaml tidak terpasang")
 
         main = yaml.safe_load((self.ROOT / "docker-compose.yml").read_text())
@@ -1072,7 +1072,7 @@ class TestDeployFiles(unittest.TestCase):
         text = (self.ROOT / "run.sh").read_text()
         for cmd in ("check)", "push)", "health)", "sysinfo)", "test)", "update)"):
             self.assertIn(cmd, text)
-        self.assertIn("python3 -m venv", text, "harus ada fallback tanpa uv")
+        self.assertIn("python3 -m venv", text, "must fall back when uv is missing")
 
 
 class TestDownloadErrorPath(unittest.TestCase):

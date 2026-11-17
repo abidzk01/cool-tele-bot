@@ -1,4 +1,4 @@
-"""Setup logging sederhana untuk bot dan modul downloader."""
+"""Simple logging setup for the bot and the downloader modules."""
 from __future__ import annotations
 
 import logging

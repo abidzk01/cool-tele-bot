@@ -1,4 +1,4 @@
-"""Registry downloader: deteksi platform dari URL lalu pilih modul yang tepat."""
+"""Downloader registry: detect the platform from a URL and pick the right module."""
 from __future__ import annotations
 
 import re
@@ -44,7 +44,7 @@ URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 
 
 def extract_urls(text: str) -> list[str]:
-    """Ambil semua URL dari teks pesan."""
+    """Collect every URL found in a message body."""
     return [u.rstrip(").,;!\"'") for u in URL_RE.findall(text or "")]
 
 
@@ -64,7 +64,7 @@ def detect_platform(url: str) -> str | None:
 
 
 def find_supported_url(text: str) -> tuple[str, str] | None:
-    """Cari URL pertama yang platformnya didukung."""
+    """Return the first URL whose platform is supported."""
     for url in extract_urls(text):
         platform = detect_platform(url)
         if platform:

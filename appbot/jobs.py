@@ -1,7 +1,7 @@
-"""Registry pekerjaan unduhan yang sedang berjalan.
+"""Registry of download jobs that are currently running.
 
-Dipakai agar /cleanup bisa membatalkan unduhan yang masih berjalan (bukan hanya
-menghapus file sisa). Setiap pekerjaan dibungkus asyncio.Task supaya bisa di-cancel.
+Used so /cleanup can cancel downloads that are still in flight (not just delete
+leftover files). Every job is wrapped in an asyncio.Task so it can be cancelled.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ log = logging.getLogger("appbot.jobs")
 
 @dataclass
 class JobRecord:
-    """Satu pekerjaan unduhan."""
+    """A single download job."""
 
     id: str
     user_id: int | None
@@ -38,7 +38,7 @@ class JobRecord:
 
 
 class JobRegistry:
-    """Kumpulan pekerjaan aktif; aman dipakai dari event loop tunggal."""
+    """Collection of active jobs; safe to use from a single event loop."""
 
     def __init__(self) -> None:
         self._jobs: dict[str, JobRecord] = {}
@@ -69,11 +69,11 @@ class JobRegistry:
         return [job for job in self._jobs.values() if job.user_id == user_id]
 
     def cancel(self, record: JobRecord) -> bool:
-        """Batalkan satu pekerjaan. True bila pekerjaan masih hidup saat dibatalkan."""
+        """Cancel one job. True when the job was still alive at cancellation time."""
         if record.cancelled:
             return False
         record.cancelled = True
-        # sinyal ke thread yt-dlp agar berhenti di kesempatan berikutnya
+        # signal the yt-dlp thread to stop at the next opportunity
         with contextlib.suppress(Exception):
             record.progress.request_cancel()
         task = record.task
@@ -83,7 +83,7 @@ class JobRegistry:
         return True
 
     async def cancel_many(self, records: list[JobRecord], timeout: float = 8.0) -> int:
-        """Batalkan beberapa pekerjaan lalu tunggu sampai benar-benar berhenti."""
+        """Cancel several jobs, then wait until they have really stopped."""
         stopped = 0
         pending: list[asyncio.Task] = []
         for record in list(records):
@@ -97,7 +97,7 @@ class JobRegistry:
                     asyncio.gather(*pending, return_exceptions=True), timeout=timeout,
                 )
             except asyncio.TimeoutError:
-                log.warning("Sebagian pekerjaan belum berhenti setelah %.0fs", timeout)
+                log.warning("Some jobs did not stop after %.0fs", timeout)
         return stopped
 
     def __len__(self) -> int:

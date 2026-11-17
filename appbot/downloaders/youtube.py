@@ -1,4 +1,4 @@
-"""Downloader YouTube (video, audio, shorts, playlist terbatas)."""
+"""YouTube downloader (video, audio, shorts, capped playlists)."""
 from __future__ import annotations
 
 import logging
@@ -16,7 +16,7 @@ MAX_PLAYLIST_ITEMS = 5
 
 
 def _heights(max_height: int) -> list[int]:
-    """Tangga resolusi yang tidak pernah melebihi MAX_VIDEO_HEIGHT."""
+    """Resolution ladder that never exceeds MAX_VIDEO_HEIGHT."""
     seen: list[int] = []
     for h in (max_height, 1080, 720, 480, 360, 144):
         if h <= max_height and h not in seen:
@@ -25,7 +25,7 @@ def _heights(max_height: int) -> list[int]:
 
 
 def guard_metadata(info: dict | None, settings) -> None:
-    """Tolak live stream dan video yang melebihi batas durasi sebelum diunduh."""
+    """Reject live streams and over-long videos before anything is downloaded."""
     if not info:
         return
     status = info.get("live_status")
@@ -58,13 +58,13 @@ def _selector(limit: int, height: int) -> str:
 async def download(settings, url: str, *, audio_only: bool = False,
                    progress: Progress | None = None) -> DownloadResult:
     if settings.ffmpeg is None and not audio_only:
-        log.warning("ffmpeg tidak ditemukan; penggabungan video+audio bisa gagal.")
+        log.warning("ffmpeg not found; merging video+audio may fail.")
 
     with JobDir(settings.temp_dir, "yt") as job:
         result = await _download_into(settings, url, job.path, audio_only, progress)
-        # pastikan codec video kompatibel dengan pemutar Telegram
+        # make sure the video codec is compatible with the Telegram player
         result.items = await base.normalize_videos(result.items, settings)
-        # pindahkan hasil ke downloads/ permanen sebelum job dir dibersihkan
+        # move the results into the permanent downloads/ before the job dir is cleaned up
         final_dir = settings.download_dir / "youtube"
         final_dir.mkdir(parents=True, exist_ok=True)
         moved: list[MediaItem] = []
@@ -100,7 +100,7 @@ async def _download_into(settings, url: str, workdir: Path, audio_only: bool,
     if is_playlist:
         extra["playlistend"] = MAX_PLAYLIST_ITEMS
     else:
-        # cek metadata dulu: tolak live stream / video terlalu panjang sebelum mengunduh
+        # check the metadata first: reject live streams / over-long videos before downloading
         if progress is not None:
             progress.status = "membaca metadata"
         probe_opts = base.base_opts(settings, PLATFORM, workdir, None, {"skip_download": True})
@@ -158,7 +158,7 @@ async def _download_into(settings, url: str, workdir: Path, audio_only: bool,
             _guard_list(result, settings)
             return result
 
-        # Terlalu besar -> coba kompresi, kalau gagal turunkan resolusi.
+        # Too large -> try compression, and drop to a lower resolution if that fails.
         if settings.auto_compress and settings.ffmpeg:
             if progress is not None:
                 progress.status = "mengompresi agar sesuai batas Telegram"
@@ -252,7 +252,7 @@ async def _try_compress(settings, items: list[MediaItem], info: dict,
                 settings.ffmpeg, max_height=min(720, settings.max_video_height),
             )
         except DownloadError as exc:
-            log.warning("Kompresi dilewati: %s", exc)
+            log.warning("Compression skipped: %s", exc)
             out.append(item)
             continue
         item.path.unlink(missing_ok=True)

@@ -1,4 +1,4 @@
-"""Helper pengiriman media ke Telegram (batas ukuran, caption, chat action)."""
+"""Helpers for sending media to Telegram (size limits, captions, chat actions)."""
 from __future__ import annotations
 
 import contextlib
@@ -41,7 +41,7 @@ def build_caption(result: DownloadResult, item: MediaItem, index: int | None = N
 
 async def send_result(bot, chat_id: int, result: DownloadResult, settings,
                       reply_to: int | None = None) -> list[str]:
-    """Kirim seluruh media hasil unduhan. Mengembalikan daftar catatan/peringatan."""
+    """Send every media item produced by the download. Returns the list of notes/warnings."""
     notes: list[str] = []
     total = len(result.items)
     reply_parameters = ReplyParameters(message_id=reply_to) if reply_to else None
@@ -51,7 +51,7 @@ async def send_result(bot, chat_id: int, result: DownloadResult, settings,
             notes.append(f"⚠️ File hilang: {item.path.name}")
             continue
 
-        # Semua jalur (terkirim, dilewati, atau gagal) berakhir dengan file dihapus.
+        # Every path (sent, skipped, or failed) ends with the file deleted.
         try:
             size = item.filesize
             if size > settings.max_upload_bytes:
@@ -105,8 +105,8 @@ async def send_result(bot, chat_id: int, result: DownloadResult, settings,
                             read_timeout=MEDIA_TIMEOUT, write_timeout=MEDIA_TIMEOUT,
                         )
             except Exception as exc:  # noqa: BLE001
-                log.warning("Gagal mengirim %s: %s", item.path.name, exc)
-                # percobaan terakhir: kirim sebagai dokumen
+                log.warning("Failed to send %s: %s", item.path.name, exc)
+                # last attempt: send it as a document
                 try:
                     with item.path.open("rb") as fh:
                         await bot.send_document(
@@ -125,7 +125,7 @@ async def send_result(bot, chat_id: int, result: DownloadResult, settings,
 
 
 def cleanup_items(items) -> int:
-    """Hapus semua file hasil unduhan (dipakai sebagai jaring pengaman di handler)."""
+    """Delete every downloaded file (used as a safety net in the handler)."""
     removed = 0
     for item in items or ():
         path = getattr(item, "path", None)
