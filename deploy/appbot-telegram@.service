@@ -1,5 +1,5 @@
 [Unit]
-Description=Telegram Bot (System Info + YouTube/TikTok/Instagram Downloader) untuk %i
+Description=Telegram Bot (System Info + YouTube/TikTok/Instagram Downloader) for %i
 Documentation=file:/opt/app_bot_telegram/docs/DEPLOY.md
 After=network-online.target
 Wants=network-online.target
@@ -14,13 +14,13 @@ Environment=DATA_DIR=/opt/app_bot_telegram
 ExecStart=/opt/app_bot_telegram/.venv/bin/python /opt/app_bot_telegram/bot.py
 Restart=always
 RestartSec=10
-# beri waktu unduhan/unggahan yang sedang jalan berhenti rapi
+# give running downloads/uploads time to stop cleanly
 TimeoutStopSec=30
 KillSignal=SIGINT
 StandardOutput=journal
 StandardError=journal
 
-# --- Pengerasan dasar ---
+# --- Basic hardening ---
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

@@ -1,161 +1,183 @@
-# 🤖 Bot Telegram: Info Sistem + Downloader YouTube / TikTok / Instagram
+# 🤖 Telegram Bot: System Info + YouTube / TikTok / Instagram Downloader
 
-Bot Telegram berbasis `python-telegram-bot` v22 dan `yt-dlp`, dengan 4 kemampuan utama:
+A Telegram bot built on `python-telegram-bot` v22 and `yt-dlp`, with five main capabilities:
 
-| Fitur | Perintah | Catatan |
+| Feature | Command | Notes |
 |---|---|---|
-| 🖥 Info sistem | `/sysinfo` | CPU, RAM, swap, disk, uptime, versi Python/yt-dlp/ffmpeg, memori proses bot, tombol refresh |
-| ▶️ YouTube | `/yt <link\|kata kunci>` | Video mp4 (maks resolusi bisa diatur), `/yt audio <link>` untuk MP3, dukung Shorts & playlist (maks 5 item) |
-| 🎵 TikTok | `/tt <link>` | **Tanpa watermark** (API tikwm, fallback yt-dlp), dukung slideshow foto + audio asli |
-| 📸 Instagram | `/ig <link>` | Reel, post foto/video, dan carousel (maks 10 media) |
-| 🧹 Bersihkan | `/cleanup` | Batalkan unduhan yang sedang berjalan + hapus file sisa; `/cleanup all` (admin) membersihkan semua pengguna |
+| 🖥 System info | `/sysinfo` | CPU, RAM, swap, disk, uptime, Python/yt-dlp/ffmpeg versions, bot process memory, refresh button |
+| ▶️ YouTube | `/yt <link\|keyword>` | MP4 up to a configurable resolution; `/yt audio <link>` for MP3; supports Shorts and playlists (max 5 items) |
+| 🎵 TikTok | `/tt <link>` | **No watermark** (tikwm API, yt-dlp fallback); photo slideshows and original audio supported |
+| 📸 Instagram | `/ig <link>` | Reels, photo/video posts, and carousels (max 10 media) |
+| 🧹 Cleanup | `/cleanup` | Cancel running downloads and purge leftover files; `/cleanup all` (admin) covers every user |
 
-Kirim link biasa ke chat (tanpa perintah) juga otomatis dikenali platformnya.
+Sending a bare link (without a command) also works — the platform is detected automatically.
+
+The bot replies in Indonesian; code, comments, and documentation are in English.
+See [AGENTS.md](AGENTS.md) for the project conventions.
 
 ---
 
-## 1. Struktur proyek
+## 1. Project layout
 
 ```
 app_bot_telegram/
 ├── bot.py                      # entry point + CLI (--check, --sysinfo, --push-commands, --health)
-├── config.py                   # konfigurasi dari .env
+├── config.py                   # configuration from .env
 ├── run.sh                      # launcher: run/check/push/health/test/update
 ├── requirements.txt
+├── requirements-dev.txt        # extra dependencies for tests (PyYAML)
 ├── .env.example
-├── Dockerfile                  # image non-root + HEALTHCHECK
-├── docker-compose.yml          # compose standar (volume data + log rotasi)
+├── Dockerfile                  # non-root image + HEALTHCHECK
+├── docker-compose.yml          # standard compose (data volume + log rotation)
+├── AGENTS.md                   # conventions: commits, language, architecture
+├── .githooks/commit-msg        # enforces Conventional Commits + English
 ├── appbot/
-│   ├── handlers.py             # perintah Telegram, antrean, status live, /cleanup
-│   ├── bot_profile.py          # dorong menu "/" & deskripsi bot ke Telegram
-│   ├── jobs.py                 # registry unduhan berjalan (bisa dibatalkan)
-│   ├── health.py               # heartbeat untuk healthcheck container
-│   ├── telegram_io.py          # pengiriman video/audio/foto + caption
-│   ├── system_info.py          # pengumpulan & format info sistem
+│   ├── handlers.py             # Telegram commands, queue, live status, /cleanup
+│   ├── bot_profile.py          # pushes the "/" menu and bot description
+│   ├── jobs.py                 # registry of running downloads (cancellable)
+│   ├── health.py               # heartbeat used by the container healthcheck
+│   ├── telegram_io.py          # media upload + caption building
+│   ├── system_info.py          # system metrics collection and formatting
 │   ├── logging_setup.py
 │   └── downloaders/
-│       ├── __init__.py         # deteksi platform + dispatch
+│       ├── __init__.py         # platform detection + dispatch
 │       ├── base.py             # yt-dlp wrapper, progress, ffmpeg, cleanup
-│       ├── youtube.py          # ladder resolusi, kompresi otomatis
-│       ├── tiktok.py           # tikwm (no watermark) + fallback yt-dlp
-│       └── instagram.py        # reels/posts/carousel
-├── scripts/livetest.py         # uji unduhan nyata tanpa token
-├── tests/test_bot.py           # 65+ tes unit & integrasi
-├── docs/DEPLOY.md              # panduan deploy: run.sh, systemd, PM2, Docker, Podman
+│       ├── youtube.py          # resolution ladder, automatic compression
+│       ├── tiktok.py           # tikwm (no watermark) + yt-dlp fallback
+│       └── instagram.py        # reels/posts/carousels
+├── scripts/
+│   ├── livetest.py             # real download test, no Telegram token needed
+│   └── check_commit_message.py # commit message linter
+├── tests/
+│   ├── test_bot.py             # unit + integration tests
+│   └── test_project_rules.py   # language, commit and secret rules
+├── docs/DEPLOY.md              # deployment guide: run.sh, systemd, PM2, Docker, Podman
 └── deploy/
-    ├── appbot-telegram@.service      # systemd unit (template per user)
+    ├── appbot-telegram@.service      # systemd unit (per-user template)
     ├── ecosystem.config.js          # PM2
-    ├── appbot-telegram.container    # Quadlet Podman
-    └── docker-compose.localapi.yml  # override Bot API lokal (upload ~2 GB)
+    ├── appbot-telegram.container    # Podman Quadlet
+    └── docker-compose.localapi.yml  # local Bot API override (~2 GB uploads)
 ```
 
-## 2. Instalasi cepat
+## 2. Quick start
 
-Butuh Python 3.10+ dan ffmpeg.
+Requires Python 3.10+ and ffmpeg.
 
 ```bash
 cd app_bot_telegram
-./run.sh            # otomatis: buat .venv, pasang dependency, jalankan bot
+./run.sh            # creates .venv, installs dependencies, starts the bot
 ```
 
-Langkah manual:
+Manual steps:
 
 ```bash
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python -r requirements.txt
-cp .env.example .env      # lalu isi BOT_TOKEN
+cp .env.example .env      # then set BOT_TOKEN
 .venv/bin/python bot.py
 ```
 
-Ambil token dari [@BotFather](https://t.me/BotFather). Validasi tanpa menjalankan bot:
+Get a token from [@BotFather](https://t.me/BotFather). Validate without starting the bot:
 
 ```bash
-.venv/bin/python bot.py --check     # cek token + dependency
-.venv/bin/python bot.py --sysinfo   # cetak info sistem ke terminal
+.venv/bin/python bot.py --check     # token + dependencies
+.venv/bin/python bot.py --sysinfo   # print system info to the terminal
 ```
 
-## 3. Konfigurasi `.env`
+## 3. `.env` configuration
 
-| Variabel | Default | Keterangan |
+| Variable | Default | Description |
 |---|---|---|
-| `BOT_TOKEN` | – | **Wajib.** Token dari BotFather |
-| `ALLOWED_USER_IDS` | kosong | Kosong = publik. Isi `123,456` untuk whitelist |
-| `ADMIN_USER_IDS` | kosong | Boleh `/cleanup all`. Kosong = `ALLOWED_USER_IDS` dianggap admin |
-| `MAX_UPLOAD_MB` | `49` | Batas ukuran kirim. Bot API resmi hanya 50 MB |
-| `MAX_VIDEO_HEIGHT` | `1080` | Resolusi maksimum YouTube |
-| `MAX_DURATION_SECONDS` | `3600` | Tolak video lebih panjang (0 = bebas) |
-| `MAX_CONCURRENT_DOWNLOADS` | `2` | Unduhan paralel |
-| `TEMP_TTL_MINUTES` | `60` | Umur file sementara (janitor tiap 15 menit) |
-| `DATA_DIR` | folder project | Akar `downloads/` dan `tmp/` (di container: `/app/data`) |
-| `FFMPEG_LOCATION` | auto | Path binary ffmpeg |
-| `AUTO_COMPRESS` | `1` | Kompres via ffmpeg bila hasil melebihi batas |
-| `TRANSCODE_TO_H264` | `1` | Transcode HEVC/VP9/AV1 → H.264 agar bisa diputar inline di Telegram |
-| `TIKTOK_USE_TIKWM` | `1` | `0` = pakai yt-dlp saja untuk TikTok |
-| `COOKIES_YOUTUBE` / `COOKIES_INSTAGRAM` / `COOKIES_TIKTOK` | – | Path file cookies Netscape |
-| `COOKIES_FROM_BROWSER` | – | Mis. `chrome`, `firefox` (dipakai bila file cookies kosong) |
-| `PROXY_URL` | – | Proxy untuk yt-dlp |
-| `LOCAL_API_URL` | – | Bot API server lokal, mis. `http://127.0.0.1:8081` (naikkan `MAX_UPLOAD_MB` ke ~2000) |
+| `BOT_TOKEN` | – | **Required.** Token from BotFather |
+| `ALLOWED_USER_IDS` | empty | Empty = public. Set `123,456` to whitelist |
+| `ADMIN_USER_IDS` | empty | Allowed to run `/cleanup all`. Empty = `ALLOWED_USER_IDS` acts as admin |
+| `MAX_UPLOAD_MB` | `49` | Upload size limit. The official Bot API allows 50 MB |
+| `MAX_VIDEO_HEIGHT` | `1080` | Maximum YouTube resolution |
+| `MAX_DURATION_SECONDS` | `3600` | Reject longer videos (0 = unlimited) |
+| `MAX_CONCURRENT_DOWNLOADS` | `2` | Parallel downloads |
+| `TEMP_TTL_MINUTES` | `60` | Lifetime of temporary files (janitor runs every 15 minutes) |
+| `DATA_DIR` | project folder | Root for `downloads/` and `tmp/` (in containers: `/app/data`) |
+| `FFMPEG_LOCATION` | auto | Path to the ffmpeg binary |
+| `AUTO_COMPRESS` | `1` | Re-encode with ffmpeg when the result exceeds the upload limit |
+| `TRANSCODE_TO_H264` | `1` | Transcode HEVC/VP9/AV1 to H.264 so Telegram plays it inline |
+| `TIKTOK_USE_TIKWM` | `1` | `0` = use yt-dlp only for TikTok |
+| `COOKIES_YOUTUBE` / `COOKIES_INSTAGRAM` / `COOKIES_TIKTOK` | – | Path to Netscape cookie files |
+| `COOKIES_FROM_BROWSER` | – | e.g. `chrome`, `firefox` (used when no cookie file is set) |
+| `PROXY_URL` | – | Proxy for yt-dlp |
+| `LOCAL_API_URL` | – | Local Bot API server, e.g. `http://127.0.0.1:8081` (raise `MAX_UPLOAD_MB` to ~2000) |
 
-## 4. Menu perintah otomatis ("/")
+## 4. Automatic command menu ("/")
 
-Saat bot start, `appbot/bot_profile.py` langsung mendorong konfigurasi berikut ke Telegram,
-jadi begitu kamu mengetik `/` di chat, daftar perintah muncul beserta deskripsinya:
+On startup, `appbot/bot_profile.py` pushes the following to Telegram, so typing `/` shows
+the command list with descriptions:
 
-- **Daftar perintah** untuk 4 scope: default, chat pribadi, grup, dan admin grup — supaya menu
-  tetap muncul baik di DM maupun di grup.
-- **Deskripsi singkat** (tampil di kolom pencarian chat) dan **deskripsi bot** (halaman profil).
-- **Menu button** diatur ke `MenuButtonCommands`, jadi tombol menu selalu membuka daftar perintah.
+- **Command list** for four scopes: default, private chats, groups, and group admins — so the
+  menu appears in DMs as well as in groups.
+- **Short description** (shown in chat search) and **bot description** (profile page).
+- **Menu button** set to `MenuButtonCommands`, so the menu button always opens the commands.
 
-Isi menu diturunkan dari `CommandHandler` yang benar-benar terdaftar di `build_application()`,
-jadi tidak mungkin melenceng dari kode. Nama alternatif (`/youtube`, `/tiktok`, `/igdl`, …) tetap
-berfungsi bila diketik tetapi sengaja tidak ditampilkan agar menu tidak penuh.
+The menu content is derived from the `CommandHandler`s actually registered in
+`build_application()`, so it cannot drift from the code. Aliases (`/youtube`, `/tiktok`,
+`/igdl`, …) keep working when typed but are deliberately hidden to keep the menu short.
 
-Untuk mendorong ulang tanpa menjalankan bot (mis. setelah mengubah deskripsi):
+Push it again without running the bot (e.g. after editing descriptions):
 
 ```bash
-./run.sh push                    # atau: .venv/bin/python bot.py --push-commands
+./run.sh push                    # or: .venv/bin/python bot.py --push-commands
 ```
 
-Perintah ini juga membaca ulang `get_my_commands()` dari Telegram dan menampilkan daftar yang
-benar-benar tersimpan, sehingga kamu bisa memastikan pendorongan berhasil.
+That command also reads `get_my_commands()` back from Telegram and prints what is really
+stored, so you can confirm the push succeeded.
 
-## 5. Cara bot menangani tiap platform
+## 5. How each platform is handled
 
-**TikTok tanpa watermark** — jalur utama memakai API publik `tikwm.com` yang mengembalikan `hdplay`/`play` tanpa watermark, lalu fallback ke yt-dlp dengan pemilihan format eksplisit (format `play_addr` diprioritaskan, `download_addr` = berwatermark dihindari). Slideshow foto dikirim sebagai sekumpulan gambar, audio asli diunduh terpisah.
+**TikTok without watermark** — the primary path uses the public `tikwm.com` API, which
+returns `hdplay`/`play` without a watermark; if that fails the bot falls back to yt-dlp with
+explicit format selection (formats containing `play_addr` are preferred, `download_addr` is
+watermarked and avoided). Photo slideshows are sent as a set of images and the original audio
+is downloaded separately.
 
-**YouTube** — memilih format terbaik yang muat batas upload lewat selektor `filesize` + `height`, mencoba tangga resolusi (mis. 1080 → 720 → 480) bila perlu, lalu mengompresi video ke ukuran target bila masih kelebihan.
+**YouTube** — picks the best format that fits the upload limit using a `filesize` + `height`
+selector, walks down a resolution ladder (e.g. 1080 → 720 → 480) when needed, and compresses
+the result when it is still too large.
 
-**Instagram** — yt-dlp menangani reel/post/carousel. Untuk konten privat atau saat Instagram membatasi permintaan, bot mengembalikan pesan yang menjelaskan cara memasang cookies.
+**Instagram** — yt-dlp handles reels, posts, and carousels. For private content or when
+Instagram rate-limits the request, the bot returns a message explaining how to install cookies.
 
-**Kompatibilitas pemutar** — hasil HEVC/VP9/AV1 (umum di TikTok & Instagram) otomatis ditranscode ke H.264 + AAC dengan `+faststart`, sehingga video diputar inline di Telegram alih-alih muncul sebagai dokumen.
+**Player compatibility** — HEVC/VP9/AV1 output (common on TikTok and Instagram) is
+transcoded to H.264 + AAC with `+faststart`, so videos play inline in Telegram instead of
+arriving as documents.
 
-### Pembersihan file
+### File cleanup
 
-File hasil unduhan **tidak disimpan** — langsung dihapus setelah diproses:
+Downloaded files are **not kept** — they are deleted as soon as they are processed:
 
-- **Kirim sukses** → file dihapus setelah Telegram menerima media.
-- **Kirim gagal** (termasuk fallback ke dokumen yang ikut gagal) → file tetap dihapus, user dapat pesan error.
-- **Dilewati karena melebihi batas upload** → file ikut dihapus agar tidak menumpuk.
-- **Bot mati/terputus di tengah proses** → handler punya `finally` yang membersihkan semua item, dan janitor menyapu sisa file di `downloads/` maupun `tmp/` setiap 15 menit untuk file yang lebih tua dari `TEMP_TTL_MINUTES`.
+- **Send succeeds** → the file is removed once Telegram accepts the media.
+- **Send fails** (including the document fallback failing) → the file is still removed and the
+  user gets an error message.
+- **Skipped for exceeding the upload limit** → the file is removed so it cannot pile up.
+- **Bot dies mid-process** → the handler has a `finally` block that cleans every item, and a
+  janitor sweeps leftovers in `downloads/` and `tmp/` every 15 minutes for files older than
+  `TEMP_TTL_MINUTES`.
 
-Set `TEMP_TTL_MINUTES=0` bila ingin mematikan janitor (file yatim tidak akan dibersihkan otomatis).
+Set `TEMP_TTL_MINUTES=0` to disable the janitor (orphaned files then stay on disk).
 
-### Perintah `/cleanup`
+### The `/cleanup` command
 
-Membatalkan unduhan yang sedang berjalan **dan** menghapus file sisa:
+Cancels running downloads **and** removes leftover files:
 
-- `/cleanup` — membatalkan unduhan milikmu. Bila tidak ada unduhan pengguna lain yang
-  berjalan, seluruh isi `tmp/` dan `downloads/` dibersihkan. Bila ada, hanya file berumur
-  lebih dari 1 menit yang dihapus agar tidak mengganggu unduhan orang lain.
-- `/cleanup all` — hanya untuk admin (`ADMIN_USER_IDS`, atau `ALLOWED_USER_IDS` bila
-  `ADMIN_USER_IDS` kosong): membatalkan **semua** unduhan lalu membersihkan seluruh folder.
+- `/cleanup` — cancels your own downloads. If no other user has a download in flight, the whole
+  `tmp/` and `downloads/` content is purged. Otherwise only files older than one minute are
+  removed, so in-flight uploads of other users are not disturbed.
+- `/cleanup all` — admins only (`ADMIN_USER_IDS`, or `ALLOWED_USER_IDS` when
+  `ADMIN_USER_IDS` is empty): cancels **all** downloads and purges every folder.
 
-Cara kerja pembatalan: setiap unduhan didaftarkan di `appbot/jobs.py` sebagai `asyncio.Task`.
-Saat dibatalkan, bot mengirim sinyal ke progress hook yt-dlp yang langsung melempar
-`DownloadCancelled` — sehingga thread yang sedang mengunduh ikut berhenti, bukan hanya
-task async-nya. Folder kerja `JobDir` lalu dibersihkan otomatis.
+How cancellation works: each download is registered in `appbot/jobs.py` as an `asyncio.Task`.
+On cancel, the bot signals the yt-dlp progress hook, which raises `DownloadCancelled`, so the
+worker thread stops too — not just the async task. The `JobDir` working directory is then
+cleaned up automatically.
 
-Balasan contoh:
+Sample reply (the bot answers in Indonesian):
 
 ```
 🧹 Pembersihan selesai
@@ -166,61 +188,77 @@ Balasan contoh:
 • Durasi          : 0.1s
 ```
 
-### Cookies (opsional)
+### Cookies (optional)
 
-1. Pasang ekstensi "Get cookies.txt LOCALLY" di browser, login ke situsnya, ekspor cookies.
-2. Simpan sebagai `cookies/youtube.txt`, `cookies/instagram.txt`, atau `cookies/tiktok.txt`.
-3. Set di `.env`, mis. `COOKIES_INSTAGRAM=cookies/instagram.txt`, lalu restart bot.
+1. Install the "Get cookies.txt LOCALLY" browser extension, log in to the site, export cookies.
+2. Save as `cookies/youtube.txt`, `cookies/instagram.txt`, or `cookies/tiktok.txt`.
+3. Point `.env` at it, e.g. `COOKIES_INSTAGRAM=cookies/instagram.txt`, then restart the bot.
 
-Tanpa cookies, konten publik biasanya tetap bisa diunduh. Cookies diperlukan saat YouTube meminta verifikasi anti-bot dari IP server, atau untuk konten Instagram yang mengharuskan login.
+Without cookies, public content usually still works. Cookies are needed when YouTube demands
+anti-bot verification from the server IP, or for Instagram content that requires a login.
 
 ## 6. Deployment
 
-Panduan lengkap untuk lima metode ada di **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+The full guide for all five methods lives in **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
-| Metode | Mulai cepat |
+| Method | Quick start |
 |---|---|
-| `run.sh` | `./run.sh` (foreground; bisa dibungkus tmux/nohup) |
+| `run.sh` | `./run.sh` (foreground; wrap in tmux/nohup if needed) |
 | systemd | `sudo cp deploy/appbot-telegram@.service /etc/systemd/system/ && sudo systemctl enable --now appbot-telegram@$USER` |
 | PM2 | `pm2 start deploy/ecosystem.config.js && pm2 save && pm2 startup` |
-| Docker | `docker compose up -d --build` lalu `docker compose ps` (status `healthy`) |
+| Docker | `docker compose up -d --build`, then `docker compose ps` (status `healthy`) |
 | Podman | `podman build -t localhost/appbot-telegram:latest .` + `deploy/appbot-telegram.container` (Quadlet) |
 
-Semua metode memakai `.env` yang sama. Perintah healthcheck seragam:
+Every method uses the same `.env`. One healthcheck command works everywhere:
 
 ```bash
-.venv/bin/python bot.py --health     # exit 0 sehat, 1 tidak
+.venv/bin/python bot.py --health     # exit 0 healthy, 1 unhealthy
 ./run.sh health
 ```
 
-Di container, healthcheck sudah tertanam di image (`HEALTHCHECK CMD python bot.py --health`)
-dan menguji heartbeat yang ditulis job queue tiap 60 detik — bukan sekadar proses hidup.
+Inside containers the check is baked into the image
+(`HEALTHCHECK CMD python bot.py --health`) and inspects the heartbeat written by the job queue
+every 60 seconds — not merely whether the process exists.
 
-Untuk upload >50 MB (sampai ~2 GB), pakai Bot API lokal:
+For uploads above 50 MB (up to ~2 GB), use a local Bot API server:
 `docker compose -f docker-compose.yml -f deploy/docker-compose.localapi.yml up -d --build`.
 
-## 7. Tes
+## 7. Tests
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v      # 65+ tes, tanpa jaringan
+.venv/bin/python -m unittest discover -s tests -v      # full suite, no network needed
 .venv/bin/python scripts/livetest.py \
     --video-url "https://www.youtube.com/watch?v=aqz-KE-bpKQ" \
     --tiktok-url "https://www.tiktok.com/@user/video/123" \
     --instagram-url "https://www.instagram.com/reel/ABC/"
 ```
 
-`livetest.py` menjalankan pipeline unduhan sungguhan (tanpa token Telegram) dan memverifikasi file hasil dengan `ffprobe`.
+`livetest.py` runs the real download pipeline (no Telegram token required) and verifies the
+resulting file with `ffprobe`.
 
-## 8. Troubleshooting
+`tests/test_project_rules.py` enforces the repository conventions: documentation must be in
+English, commit messages must follow Conventional Commits, user-facing Indonesian strings must
+stay intact, and no token patterns may be committed.
 
-| Gejala | Solusi |
+## 8. Contributing
+
+Read [AGENTS.md](AGENTS.md) first. In short:
+
+- Code, comments, docstrings, docs, and commit messages are **English**; bot replies stay Indonesian.
+- Commit messages follow **Conventional Commits** (`feat(scope): subject`, imperative, ≤72 chars).
+- Enable the local hook once per clone: `git config core.hooksPath .githooks`.
+- Run `./run.sh test` before committing.
+
+## 9. Troubleshooting
+
+| Symptom | Fix |
 |---|---|
-| `Sign in to confirm you're not a bot` | Set `COOKIES_YOUTUBE`, atau jalankan dari IP rumahan |
-| Video muncul sebagai dokumen, tidak bisa diputar | Pastikan `ffmpeg` terdeteksi (`/sysinfo`) dan `TRANSCODE_TO_H264=1` |
-| Instagram: "menolak permintaan tanpa login" | Set `COOKIES_INSTAGRAM` |
-| File > 50 MB tidak terkirim | Naikkan `MAX_UPLOAD_MB` dengan Bot API lokal, atau turunkan `MAX_VIDEO_HEIGHT` |
-| TikTok gagal via API | Set `TIKTOK_USE_TIKWM=0` untuk memakai jalur yt-dlp saja |
-| Bot tidak merespons | Cek `journalctl`/log; pastikan token valid lewat `bot.py --check` |
-| Unduhan terasa lambat setelah selesai | Bot sedang transcode video ke H.264 (berat di server ARM/CPU lemah). Set `TRANSCODE_TO_H264=0` bila pemutar Telegram di perangkatmu sudah mendukung HEVC/VP9 |
-| `/sysinfo` menyebut ffmpeg tidak ditemukan | Set `FFMPEG_LOCATION=/path/ke/ffmpeg` di `.env` |
-| Menu `/` tidak muncul | Jalankan `./run.sh push`; bila tetap kosong, restart aplikasi Telegram (menu di-cache di klien) |
+| `Sign in to confirm you're not a bot` | Set `COOKIES_YOUTUBE`, or run from a residential IP |
+| Video arrives as a document and will not play | Make sure `ffmpeg` is detected (`/sysinfo`) and `TRANSCODE_TO_H264=1` |
+| Instagram rejects the request without login | Set `COOKIES_INSTAGRAM` |
+| Files over 50 MB are not delivered | Raise `MAX_UPLOAD_MB` with a local Bot API server, or lower `MAX_VIDEO_HEIGHT` |
+| TikTok fails through the API | Set `TIKTOK_USE_TIKWM=0` to use the yt-dlp path only |
+| Bot does not respond | Check `journalctl`/logs; validate the token with `bot.py --check` |
+| Downloads feel slow after finishing | The bot is transcoding to H.264 (expensive on ARM/weak CPUs). Set `TRANSCODE_TO_H264=0` if your Telegram client already plays HEVC/VP9 |
+| `/sysinfo` reports ffmpeg not found | Set `FFMPEG_LOCATION=/path/to/ffmpeg` in `.env` |
+| The `/` menu is empty | Run `./run.sh push`; if it still looks empty, restart the Telegram app (clients cache the menu) |

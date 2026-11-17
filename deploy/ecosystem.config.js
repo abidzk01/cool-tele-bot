@@ -1,15 +1,15 @@
 /**
- * Konfigurasi PM2 untuk bot Telegram.
+ * PM2 configuration for the Telegram bot.
  *
  *   pm2 start deploy/ecosystem.config.js
  *   pm2 logs appbot-telegram
  *   pm2 save && pm2 startup
  *
- * Sesuaikan APPBOT_ROOT bila project tidak berada di /opt/app_bot_telegram:
+ * Override APPBOT_ROOT when the project is not at /opt/app_bot_telegram:
  *   APPBOT_ROOT=/srv/appbot pm2 start deploy/ecosystem.config.js
  *
- * Catatan: PM2 tidak membaca .env. Bot memuat .env sendiri lewat python-dotenv,
- * jadi pastikan file .env ada di dalam APPBOT_ROOT.
+ * Note: PM2 does not read .env. The bot loads it itself through python-dotenv,
+ * so make sure .env exists inside APPBOT_ROOT.
  */
 const path = require("path");
 
@@ -21,7 +21,7 @@ module.exports = {
     {
       name: "appbot-telegram",
       cwd: ROOT,
-      // jalankan interpreter python dari virtualenv, jangan dibungkus node
+      // run the virtualenv interpreter directly; do not wrap it in node
       script: path.join(ROOT, ".venv", "bin", "python"),
       args: "bot.py",
       interpreter: "none",
@@ -29,7 +29,7 @@ module.exports = {
       max_restarts: 20,
       min_uptime: "60s",
       restart_delay: 5000,
-      // beri waktu unduhan/unggahan berhenti rapi saat restart
+      // give running downloads/uploads time to stop cleanly on restart
       kill_timeout: 20000,
       max_memory_restart: "512M",
       time: true,
